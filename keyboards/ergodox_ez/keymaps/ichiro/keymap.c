@@ -1,9 +1,5 @@
-// Netable differences vs. the default firmware for the ErgoDox EZ:
-// 1. The Cmd key is now on the right side, making Cmd+Space easier.
-// 2. The media keys work on OSX (But not on Windows).
-#include "ergodox_ez.h"
-#include "debug.h"
-#include "action_layer.h"
+#include QMK_KEYBOARD_H
+#include "version.h"
 
 #define BASE 0 // default layer
 #define NUMBER  1 // mac command layer
@@ -11,14 +7,14 @@
 #define CURSOR 3 // cursor
 #define MOUSE 4 // mouse keys
 
-enum {
-	Q_1 = 0,
-	W_2,
-};
-
-enum {
-	MACRO_DEFAULT = 0,
-	MACRO_INPUT_SEQ = 1,
+enum custom_keycodes {
+#ifdef ORYX_CONFIGURATOR
+  EPRM = EZ_SAFE_RANGE,
+#else
+  EPRM = SAFE_RANGE,
+#endif
+  VRSN,
+  RGB_SLD
 };
 
 const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
@@ -45,10 +41,10 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  */
 // If it accepts an argument (i.e, is a function), it doesn't need KC_.
 // Otherwise, it needs KC_*
-[BASE] = KEYMAP(  // layer 0 : default
+[BASE] = LAYOUT_ergodox(  // layer 0 : default
         // left hand
         KC_ESCAPE, KC_1,         KC_2,       KC_3,       KC_4,       KC_5,   KC_LEFT,
-        KC_TAB,    TD(Q_1),         KC_W,       KC_E,       KC_R,       KC_T,   MO(CURSOR),
+        KC_TAB,    TD(Q_1),      KC_W,       KC_E,       KC_R,       KC_T,   MO(CURSOR),
         MO(CURSOR), KC_A,        KC_S,       KC_D,       KC_F,       KC_G,
         KC_EQL,    KC_Z,         KC_X,       KC_C,       KC_V,       KC_B,   MO(NUMBER),
         SYMB,      KC_GRV,       KC_ESCAPE,  KC_NO,      KC_NO,
@@ -65,7 +61,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
              KC_PGUP,         CTL_T(KC_ESC),
              KC_PGDN,
              KC_LALT,         KC_ENT, KC_SPC
-    ),
+),
 
 
 
@@ -92,7 +88,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  *                                 `--------------------'       `--------------------'
  */
 // SYMBOLS
-[NUMBER] = KEYMAP(
+[NUMBER] = LAYOUT_ergodox(
        // left hand 38
        RESET, KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5, KC_F6,
        KC_TRNS, M(MACRO_INPUT_SEQ), KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS,
@@ -134,7 +130,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
  *                                 |      |      |      |       |      |      |      |
  *                                 `--------------------'       `--------------------'
  */
-[CURSOR] = KEYMAP(
+[CURSOR] = LAYOUT_ergodox(
     // left hand
        KC_TRNS, KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5, KC_F6,
        KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS,
@@ -156,7 +152,7 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 ),
 
 // MEDIA AND MOUSE
-[MOUSE] = KEYMAP(
+[MOUSE] = LAYOUT_ergodox(
        KC_TRNS, KC_F1,   KC_F2,   KC_F3,   KC_F4,   KC_F5, KC_F6,
        KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS,
        KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS, KC_TRNS,
@@ -177,63 +173,100 @@ const uint16_t PROGMEM keymaps[][MATRIX_ROWS][MATRIX_COLS] = {
 )
 };
 
-const uint16_t PROGMEM fn_actions[] = {
-    [1] = ACTION_LAYER_TAP_TOGGLE(SYMB)                // FN1 - Momentary Layer 1 (Symbols)
-};
-
-const macro_t *action_get_macro(keyrecord_t *record, uint8_t id, uint8_t opt)
-{
-  // MACRODOWN only works in this function
-      switch(id) {
-        case MACRO_DEFAULT:
-			if (record->event.pressed) {
-			  register_code(KC_RSFT);
-			} else {
-			  unregister_code(KC_RSFT);
-			}
-			break;
-
-		case MACRO_INPUT_SEQ:
-			if (record->event.pressed) {
-				return MACRO(I(16), T(S), T(U), T(P), T(E), T(R), T(SPC), T(S), T(H), T(I), T(P), END );
-			}
-			break;
-      }
-    return MACRO_NONE;
-};
+bool process_record_user(uint16_t keycode, keyrecord_t *record) {
+  if (record->event.pressed) {
+    switch (keycode) {
+      case EPRM:
+        eeconfig_init();
+        return false;
+      case VRSN:
+        SEND_STRING (QMK_KEYBOARD "/" QMK_KEYMAP " @ " QMK_VERSION);
+        return false;
+      #ifdef RGBLIGHT_ENABLE
+      case RGB_SLD:
+        rgblight_mode(1);
+        return false;
+      #endif
+    }
+  }
+  return true;
+}
 
 // Runs just one time when the keyboard initializes.
 void matrix_init_user(void) {
-
+#ifdef RGBLIGHT_COLOR_LAYER_0
+  rgblight_setrgb(RGBLIGHT_COLOR_LAYER_0);
+#endif
 };
 
-// Runs constantly in the background, in a loop.
-void matrix_scan_user(void) {
+// Runs whenever there is a layer state change.
+layer_state_t layer_state_set_user(layer_state_t state) {
+  ergodox_board_led_off();
+  ergodox_right_led_1_off();
+  ergodox_right_led_2_off();
+  ergodox_right_led_3_off();
 
-    uint8_t layer = biton32(layer_state);
-
-    ergodox_board_led_off();
-    ergodox_right_led_1_off();
-    ergodox_right_led_2_off();
-    ergodox_right_led_3_off();
-    switch (layer) {
-      // TODO: Make this relevant to the ErgoDox EZ.
-        case 1:
-            ergodox_right_led_1_on();
-            break;
-        case 2:
-            ergodox_right_led_2_on();
-            break;
-        default:
-            // none
-            break;
+  uint8_t layer = get_highest_layer(state);
+  switch (layer) {
+      case 0:
+        #ifdef RGBLIGHT_COLOR_LAYER_0
+          rgblight_setrgb(RGBLIGHT_COLOR_LAYER_0);
+        #else
+        #ifdef RGBLIGHT_ENABLE
+          rgblight_init();
+        #endif
+        #endif
+        break;
+      case 1:
+        ergodox_right_led_1_on();
+        #ifdef RGBLIGHT_COLOR_LAYER_1
+          rgblight_setrgb(RGBLIGHT_COLOR_LAYER_1);
+        #endif
+        break;
+      case 2:
+        ergodox_right_led_2_on();
+        #ifdef RGBLIGHT_COLOR_LAYER_2
+          rgblight_setrgb(RGBLIGHT_COLOR_LAYER_2);
+        #endif
+        break;
+      case 3:
+        ergodox_right_led_3_on();
+        #ifdef RGBLIGHT_COLOR_LAYER_3
+          rgblight_setrgb(RGBLIGHT_COLOR_LAYER_3);
+        #endif
+        break;
+      case 4:
+        ergodox_right_led_1_on();
+        ergodox_right_led_2_on();
+        #ifdef RGBLIGHT_COLOR_LAYER_4
+          rgblight_setrgb(RGBLIGHT_COLOR_LAYER_4);
+        #endif
+        break;
+      case 5:
+        ergodox_right_led_1_on();
+        ergodox_right_led_3_on();
+        #ifdef RGBLIGHT_COLOR_LAYER_5
+          rgblight_setrgb(RGBLIGHT_COLOR_LAYER_5);
+        #endif
+        break;
+      case 6:
+        ergodox_right_led_2_on();
+        ergodox_right_led_3_on();
+        #ifdef RGBLIGHT_COLOR_LAYER_6
+          rgblight_setrgb(RGBLIGHT_COLOR_LAYER_6);
+        #endif
+        break;
+      case 7:
+        ergodox_right_led_1_on();
+        ergodox_right_led_2_on();
+        ergodox_right_led_3_on();
+        #ifdef RGBLIGHT_COLOR_LAYER_7
+          rgblight_setrgb(RGBLIGHT_COLOR_LAYER_7);
+        #endif
+        break;
+      default:
+        break;
     }
 
+  return state;
 };
-
-// TAP DANCE TEST
-const qk_tap_dance_action_t tap_dance_actions[] = {
-	[Q_1] = ACTION_TAP_DANCE_DOUBLE(KC_Q, KC_1),
-};
-
-
